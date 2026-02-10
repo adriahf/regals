@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Yakiniku Master - Precision Edition</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- ESTILS BASE --- */
+        * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; user-select: none; -webkit-user-select: none; }
+        
+        body {
+            background-color: #fcfaf2;
+            color: #2b2b2b;
+            font-family: 'Noto Serif JP', serif;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-image: url("data:image/svg+xml,%3Csvg width='200' height='200' viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.08'/%3E%3C/svg%3E");
+        }
+
+        #game-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 500px;
+            aspect-ratio: 9/16;
+            max-height: 100vh;
+            overflow: hidden;
+            background: rgba(255,255,255,0.2);
+        }
+
+        /* --- INTERFÍCIE --- */
+        .ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 40px 30px;
+        }
+
+        .header { text-align: center; }
+        .level-badge {
+            display: inline-block;
+            border-bottom: 1.5px solid #bc002d;
+            color: #bc002d;
+            padding: 5px 12px;
+            font-size: 0.85rem;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        /* --- SLIDER DE PRECISIÓ EXTREMA --- */
+        #ui-cooking-indicator {
+            position: absolute;
+            bottom: 22%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 75%;
+            display: none;
+            z-index: 15;
+            text-align: center;
+        }
+
+        .slider-label {
+            font-size: 0.6rem;
+            letter-spacing: 2px;
+            color: #999;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .slider-track {
+            position: relative;
+            width: 100%;
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+        }
+
+        .zone-perfect {
+            position: absolute;
+            left: 72%;
+            width: 5%;
+            height: 100%;
+            background: rgba(188, 0, 45, 0.3);
+            border-left: 1px solid #bc002d;
+            border-right: 1px solid #bc002d;
+            box-shadow: 0 0 10px rgba(188, 0, 45, 0.2);
+        }
+
+        #slider-arrow {
+            position: absolute;
+            top: -6px;
+            left: 0%;
+            width: 2px;
+            height: 16px;
+            background: #111;
+            transition: left 0.05s linear;
+        }
+
+        /* --- PANTALLES --- */
+        .screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #fcfaf2;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 40px;
+            transition: opacity 0.6s ease;
+        }
+        
+        .hidden { opacity: 0; pointer-events: none; }
+
+        h1 { font-size: 3rem; color: #111; letter-spacing: 8px; font-weight: 300; margin-bottom: 10px; }
+        h2 { font-size: 0.9rem; color: #bc002d; letter-spacing: 5px; text-transform: uppercase; margin-bottom: 40px; }
+        p { margin-bottom: 50px; font-size: 0.9rem; color: #666; line-height: 2.2; max-width: 280px; }
+
+        .btn {
+            padding: 14px 45px;
+            background: transparent;
+            border: 1px solid #2b2b2b;
+            color: #2b2b2b;
+            font-size: 0.85rem;
+            cursor: pointer;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            transition: all 0.3s;
+        }
+        .btn:hover { background: #2b2b2b; color: #fff; }
+
+        canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+        canvas:active { cursor: grabbing; }
+
+        .card-final {
+            background: #fff;
+            padding: 60px 30px;
+            border: 1px solid #eee;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.05);
+            max-width: 320px;
+        }
+        
+        .hint {
+            font-size: 0.75rem;
+            color: #888;
+            margin-top: 10px;
+            letter-spacing: 1px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-wrapper">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- INDICADOR DE COCCIÓ DE PRECISIÓ -->
+    <div id="ui-cooking-indicator">
+        <div class="slider-label">Cocció de la cara inferior</div>
+        <div class="slider-track">
+            <div class="zone-perfect"></div>
+            <div id="slider-arrow"></div>
+        </div>
+    </div>
+
+    <div class="ui-layer">
+        <div class="header">
+            <span class="level-badge" id="levelDisplay">Nivell 1</span>
+            <div class="hint" id="msgDisplay">Subtítol de l'aliment</div>
+        </div>
+    </div>
+
+    <!-- PANTALLA INICI -->
+    <div id="startScreen" class="screen">
+        <h1 style="font-weight: 500;">焼肉</h1>
+        <h2>Yakiniku Master</h2>
+        <p>Tota recompensa requereix d'un entrenament previ.<br><br>Posa la carn a la graella i fes-la al punt.<br>Clica per girar-la.</p>
+        <button class="btn" onclick="startGame()">Començar</button>
+    </div>
+
+    <!-- PANTALLA ÈXIT -->
+    <div id="levelScreen" class="screen hidden">
+        <div style="font-size: 4rem; color: #bc002d; margin-bottom: 10px;">○</div>
+        <h2 style="color: #111;">Mestria assolida</h2>
+        <p>Has trobat el punt exacte. Un tall digne d'un mestre.</p>
+        <button class="btn" onclick="nextLevel()">Continuar</button>
+    </div>
+
+    <!-- PANTALLA ERROR -->
+    <div id="failScreen" class="screen hidden">
+        <div style="font-size: 4rem; color: #111; margin-bottom: 10px;">×</div>
+        <h2 style="color: #555;">Imperfecte</h2>
+        <p id="failDesc">La carn no ha quedat al punt exacte.</p>
+        <button class="btn" onclick="retryLevel()">Tornar a intentar</button>
+    </div>
+
+    <!-- PANTALLA FINAL -->
+    <div id="winScreen" class="screen hidden">
+        <div class="card-final">
+            <h1 style="font-size: 2.2rem; letter-spacing: 5px;">炭焼名理</h1>
+            <div style="width: 25px; height: 1.5px; background: #bc002d; margin: 25px auto;"></div>
+            <div style="font-family: monospace; color: #bc002d; font-size: 1.15rem; margin: 25px 0;">41.391343, 2.146592</div>
+            <p style="font-size: 0.75rem; color: #aaa; text-transform:uppercase; margin: 0;">Data a determinar</p>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * YAKINIKU MASTER - PRECISION ENGINE
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const sliderUI = document.getElementById('ui-cooking-indicator');
+const sliderArrow = document.getElementById('slider-arrow');
+
+let width, height, scale;
+let gameState = 'START'; 
+let currentLevel = 0;
+let lastTime = 0;
+
+const LEVELS = [
+    { name: "Wagyu A5", type: 'wagyu', speed: 0.9, subtitle: "Respecta la peça." },
+    { name: "Costella", type: 'rib', speed: 1.6, subtitle: "Compte amb el foc viu." },
+    { name: "Llengua", type: 'tongue', speed: 2.4, subtitle: "Fina i delicada." }
+];
+
+let meat = null;
+let particles = [];
+let dragInfo = { active: false, offsetX: 0, offsetY: 0, startX:0, startY:0, time:0 };
+
+let GRILL, PLATE, SAUCE;
+
+const PERFECT_MIN = 72;
+const PERFECT_MAX = 77;
+
+class Meat {
+    constructor(type, speed) {
+        this.type = type;
+        this.x = PLATE.x;
+        this.y = PLATE.y;
+        this.w = (type === 'tongue' ? 110 : (type === 'wagyu' ? 120 : 150)) * scale;
+        this.h = (type === 'tongue' ? 110 : (type === 'wagyu' ? 120 : 80)) * scale;
+        this.speed = speed;
+        this.sides = [0, 0]; 
+        this.flipped = false; 
+        this.hasBeenFlipped = false; // Control de si s'ha girat almenys un cop
+        this.isDragging = false;
+        this.onGrill = false;
+    }
+
+    get bottomSideIndex() { return this.flipped ? 1 : 0; }
+    get topSideIndex() { return this.flipped ? 0 : 1; }
+
+    update(dt) {
+        const dist = Math.hypot(this.x - GRILL.x, this.y - GRILL.y);
+        this.onGrill = (dist < GRILL.r && !this.isDragging);
+        
+        if (this.onGrill) {
+            const heat = Math.max(0.3, 1.0 - (dist / GRILL.r));
+            this.sides[this.bottomSideIndex] += heat * this.speed * dt * 22;
+            if (Math.random() < 0.08) particles.push(new Particle(this.x + (Math.random()-0.5)*30, this.y));
+        }
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        const topLevel = this.sides[this.topSideIndex];
+        ctx.fillStyle = this.getColor(topLevel);
+        ctx.strokeStyle = '#2b2b2b'; 
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        if (this.type === 'tongue') ctx.arc(0, 0, this.w/2, 0, Math.PI*2);
+        else ctx.rect(-this.w/2, -this.h/2, this.w, this.h);
+        ctx.fill();
+        ctx.stroke();
+        
+        if (topLevel > 40) {
+            ctx.strokeStyle = `rgba(40, 20, 10, ${Math.min((topLevel-40)/40, 0.4)})`;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(-12, -12); ctx.lineTo(12, 12);
+            ctx.moveTo(12, -12); ctx.lineTo(-12, 12);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    getColor(lvl) {
+        if (lvl < PERFECT_MIN) return '#f4c2c2'; 
+        if (lvl <= PERFECT_MAX) return '#c68e5d'; 
+        return '#3d3d3d'; 
+    }
+
+    isPerfect() {
+        return this.hasBeenFlipped && 
+               this.sides[0] >= PERFECT_MIN && this.sides[0] <= PERFECT_MAX && 
+               this.sides[1] >= PERFECT_MIN && this.sides[1] <= PERFECT_MAX;
+    }
+
+    getFailReason() {
+        if (!this.hasBeenFlipped) {
+            return "T'has oblidat de girar la carn! Clica-la quan estigui a la graella per girar-la.";
+        }
+        if (this.sides[0] > PERFECT_MAX || this.sides[1] > PERFECT_MAX) {
+            return "S'ha cremat el punt de cocció.";
+        }
+        return "Falta precisió, està massa crua.";
+    }
+}
+
+class Particle {
+    constructor(x, y) {
+        this.x = x; this.y = y; this.life = 1.0; 
+        this.vy = -Math.random() * 1.0 - 0.2; this.size = 2;
+    }
+    update() { this.y += this.vy; this.life -= 0.03; this.size += 0.1; }
+    draw(ctx) {
+        ctx.globalAlpha = this.life * 0.25; ctx.fillStyle = '#bbb';
+        ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI*2); ctx.fill();
+        ctx.globalAlpha = 1;
+    }
+}
+
+function init() {
+    resize();
+    window.addEventListener('resize', resize);
+    
+    canvas.addEventListener('mousedown', handleStart);
+    canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault(); 
+        handleStart(e);
+    }, {passive: false});
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('touchmove', handleMove, {passive: false});
+    window.addEventListener('mouseup', handleEnd);
+    window.addEventListener('touchend', handleEnd);
+    
+    requestAnimationFrame(loop);
+}
+
+function resize() {
+    const rect = document.getElementById('game-wrapper').getBoundingClientRect();
+    canvas.width = rect.width; canvas.height = rect.height;
+    width = canvas.width; height = canvas.height;
+    scale = width / 500;
+    GRILL = { x: width * 0.5, y: height * 0.45, r: width * 0.32 };
+    PLATE = { x: width * 0.22, y: height * 0.85, r: width * 0.08 };
+    SAUCE = { x: width * 0.78, y: height * 0.85, r: width * 0.08 };
+}
+
+function startGame() { document.getElementById('startScreen').classList.add('hidden'); loadLevel(0); }
+
+function loadLevel(idx) {
+    currentLevel = idx; gameState = 'PLAYING';
+    document.getElementById('levelDisplay').innerText = LEVELS[idx].name;
+    document.getElementById('msgDisplay').innerText = LEVELS[idx].subtitle;
+    document.getElementById('levelScreen').classList.add('hidden');
+    document.getElementById('failScreen').classList.add('hidden');
+    meat = new Meat(LEVELS[idx].type, LEVELS[idx].speed);
+    particles = [];
+}
+
+function nextLevel() { 
+    if (currentLevel < 2) loadLevel(currentLevel + 1); 
+    else { gameState = 'WIN'; document.getElementById('winScreen').classList.remove('hidden'); }
+}
+
+function retryLevel() { loadLevel(currentLevel); }
+
+function loop(timestamp) {
+    const dt = (timestamp - lastTime) / 1000 || 0;
+    lastTime = timestamp;
+    if (gameState === 'PLAYING') update(dt);
+    draw();
+    requestAnimationFrame(loop);
+}
+
+function update(dt) {
+    if (!meat) return;
+    meat.update(dt);
+    if (meat.onGrill) {
+        sliderUI.style.display = 'block';
+        sliderArrow.style.left = Math.min(meat.sides[meat.bottomSideIndex], 100) + '%';
+    } else {
+        sliderUI.style.display = 'none';
+    }
+    particles.forEach((p, i) => {
+        p.update();
+        if (p.life <= 0) particles.splice(i, 1);
+    });
+}
+
+function draw() {
+    ctx.clearRect(0, 0, width, height);
+    ctx.strokeStyle = '#e8e8e8'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(GRILL.x, GRILL.y, GRILL.r, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(GRILL.x, GRILL.y, GRILL.r*0.35, 0, Math.PI*2); ctx.stroke();
+    for(let i=0; i<8; i++) {
+        const a = (Math.PI*2/8)*i;
+        ctx.moveTo(GRILL.x+Math.cos(a)*GRILL.r*0.35, GRILL.y+Math.sin(a)*GRILL.r*0.35);
+        ctx.lineTo(GRILL.x+Math.cos(a)*GRILL.r, GRILL.y+Math.sin(a)*GRILL.r);
+    }
+    ctx.stroke();
+    ctx.fillStyle = '#bbb'; ctx.font = '700 10px "Noto Serif JP"'; ctx.textAlign = 'center';
+    ctx.fillText("CRU", PLATE.x, PLATE.y + 4);
+    ctx.fillText("SERVEIX", SAUCE.x, SAUCE.y + 4);
+    particles.forEach(p => p.draw(ctx));
+    if (meat) meat.draw(ctx);
+}
+
+function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: (clientX - rect.left) * (width/rect.width), y: (clientY - rect.top) * (height/rect.height) };
+}
+
+function handleStart(e) {
+    if (gameState !== 'PLAYING' || !meat) return;
+    const pos = getPos(e);
+    if (Math.hypot(pos.x - meat.x, pos.y - meat.y) < meat.w * 0.8) {
+        dragInfo.active = true;
+        dragInfo.offsetX = meat.x - pos.x; dragInfo.offsetY = meat.y - pos.y;
+        dragInfo.startX = meat.x; dragInfo.startY = meat.y;
+        dragInfo.time = Date.now();
+        meat.isDragging = true;
+    }
+}
+
+function handleMove(e) {
+    if (!dragInfo.active) return;
+    const pos = getPos(e);
+    meat.x = pos.x + dragInfo.offsetX; meat.y = pos.y + dragInfo.offsetY;
+}
+
+function handleEnd(e) {
+    if (!dragInfo.active) return;
+    const timeElapsed = Date.now() - dragInfo.time;
+    const moved = Math.hypot(meat.x - dragInfo.startX, meat.y - dragInfo.startY);
+    meat.isDragging = false; dragInfo.active = false;
+
+    // Detectar intent de gir (TAP)
+    if (timeElapsed < 300 && moved < 15) {
+        meat.flipped = !meat.flipped;
+        meat.hasBeenFlipped = true; // Marquem que s'ha girat almenys un cop
+        meat.y -= 10; setTimeout(() => meat.y += 10, 80);
+        return;
+    }
+
+    // Detectar si se serveix a la salsa
+    if (Math.hypot(meat.x - SAUCE.x, meat.y - SAUCE.y) < SAUCE.r + 30) {
+        if (meat.isPerfect()) {
+            document.getElementById('levelScreen').classList.remove('hidden');
+        } else {
+            document.getElementById('failScreen').classList.remove('hidden');
+            document.getElementById('failDesc').innerText = meat.getFailReason();
+            setTimeout(() => { if(gameState==='PLAYING'){meat.x=PLATE.x; meat.y=PLATE.y;} }, 1000);
+        }
+    }
+}
+
+window.onload = init;
+</script>
+</body>
+</html>
